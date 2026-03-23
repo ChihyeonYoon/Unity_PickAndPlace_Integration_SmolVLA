@@ -23,7 +23,7 @@ This project builds upon the Unity Robotics Hub's Pick-and-Place tutorial, which
     *   Confirmed successful ROS message publishing and reception (e.g., `pick_pose`, `place_pose`).
 *   **Pick-and-Place Demo Setup in Custom Scene:**
     *   **Successfully transferred all runtime-generated objects (robot, gripper, table, target, etc.) from `DemoScene` to a custom scene (`New Scene.unity`). This was achieved by running `DemoScene` in Play Mode, copying the instantiated objects, and pasting them into `New Scene.unity` in Edit Mode, thereby resolving dynamic instantiation issues and ensuring a fully configured scene in the editor.**
-    *   Implemented a "Reset Scene" UI button for convenient demo iteration.
+    *   **Implemented a "Reset Scene" UI button for convenient demo iteration, allowing users to easily restart the pick-and-place simulation.**
     *   **Main Camera perspective, UI button size, and position were adjusted for optimal viewing and interaction.**
 *   **Gripper Integration Status:**
     *   Initially, a `NullReferenceException` in `TrajectoryPlanner.cs` occurred due to the `niryo_one` URDF lacking a direct gripper definition. **This was successfully resolved by copying the fully configured robot model, including its gripper, from the runtime-generated `DemoScene` to `New Scene.unity`. This ensured the gripper's `ArticulationBody` components were correctly loaded and referenced by `TrajectoryPlanner.cs`, allowing gripper control to function.**
