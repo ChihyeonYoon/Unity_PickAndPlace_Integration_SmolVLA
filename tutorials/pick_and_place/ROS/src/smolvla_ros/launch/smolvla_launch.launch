@@ -1,0 +1,3 @@
+<launch>
+  <node name="smolvla_node" pkg="smolvla_ros" type="smolvla_node.py" output="screen" />
+</launch>
