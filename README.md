@@ -1,6 +1,6 @@
 # Unity Pick and Place Integration with SmolVLA
 
-This repository contains the Unity Pick and Place tutorial project from the [Unity Robotics Hub](https://github.com/Unity-Technologies/Unity-Robotics-Hub/tree/main/tutorials/pick_and_place), enhanced with initial steps for integrating the **SmolVLA (Visual Language Action)** model within the ROS Docker environment.
+This repository contains the Unity Pick and Place tutorial project from the [Unity Robotics Hub](https://github.com/Unity-Technologies/Unity-Robotics-Hub/tree/main/tutorials/pick_and_place), enhanced with the integration of the **SmolVLA (Visual Language Action)** model within a ROS Docker environment.
 
 The goal of this project is to explore how Unity's robotic simulation tools can be combined with advanced VLA models like SmolVLA for intuitive, language-driven robotic control.
 
@@ -8,43 +8,70 @@ The goal of this project is to explore how Unity's robotic simulation tools can 
 
 ## Project Overview
 
-This project builds upon the Unity Robotics Hub's Pick-and-Place tutorial, which demonstrates integrating Unity with ROS for robotic simulation. We have completed the core tutorial steps and initiated the integration of SmolVLA.
+This project builds upon the Unity Robotics Hub's Pick-and-Place tutorial, which demonstrates integrating Unity with ROS for robotic simulation. We have successfully established the communication pipeline between Unity and a ROS-based SmolVLA inference node.
 
-### Key Enhancements & Progress:
+### Summary of New and Modified Elements:
 
-*   **ROS Docker Environment with Python 3 & SmolVLA:**
-    *   The ROS Docker environment has been successfully upgraded to support Python 3.
-    *   **SmolVLA and its `LeRobot` dependencies are now installed** within a new Docker image (`unity-robotics:smolvla`). This involved modifying the `Dockerfile` (`tutorials/pick_and_place/docker/Dockerfile`) to include `LeRobot` cloning and `pip3 install -e ".[smolvla]"` commands, resolving Python 2/3 compatibility issues.
-*   **Resolved Unity Import and Scripting Issues:**
-    *   Successfully imported the `niryo_one` robot URDF into Unity, addressing `DllNotFoundException` (by setting Mesh Decomposer to Unity) and `DirectoryNotFoundException` (by manually copying mesh files into the Unity project's `Assets/New Folder/niryo_one_urdf/meshes` path).
-    *   Resolved `CS0246` errors by ensuring all necessary tutorial scripts (`TargetPlacement.cs`, `PickAndPlaceRosPublisher.cs` etc.) were correctly placed in the `Assets/Scripts` folder of the Unity project.
-*   **ROS-Unity Communication Established:**
-    *   Configured `ROS TCP Endpoint` and `ROS Settings` in Unity for seamless communication with the ROS Docker server, using the host machine's IP address.
-    *   Confirmed successful ROS message publishing and reception (e.g., `pick_pose`, `place_pose`).
-*   **Pick-and-Place Demo Setup in Custom Scene:**
-    *   **Successfully transferred all runtime-generated objects (robot, gripper, table, target, etc.) from `DemoScene` to a custom scene (`New Scene.unity`). This was achieved by running `DemoScene` in Play Mode, copying the instantiated objects, and pasting them into `New Scene.unity` in Edit Mode, thereby resolving dynamic instantiation issues and ensuring a fully configured scene in the editor.**
-    *   **Implemented a "Reset Scene" UI button for convenient demo iteration, allowing users to easily restart the pick-and-place simulation.**
-    *   **Main Camera perspective, UI button size, and position were adjusted for optimal viewing and interaction.**
-*   **Gripper Integration Status:**
-    *   Initially, a `NullReferenceException` in `TrajectoryPlanner.cs` occurred due to the `niryo_one` URDF lacking a direct gripper definition. **This was successfully resolved by copying the fully configured robot model, including its gripper, from the runtime-generated `DemoScene` to `New Scene.unity`. This ensured the gripper's `ArticulationBody` components were correctly loaded and referenced by `TrajectoryPlanner.cs`, allowing gripper control to function.**
+Based on the work in the `Unity-Robotics-Hub/tutorials/pick_and_place` directory and synchronized with the GitHub repository [Unity_PickAndPlace_Integration_SmolVLA](https://github.com/ChihyeonYoon/Unity_PickAndPlace_Integration_SmolVLA).
 
-## Tutorial Phases Covered (and where we are):
+#### 1. New C# Scripts (Unity Project `Assets/Scripts`)
+*   **`RosImagePublisher.cs`**:
+    *   **Role**: Captures a single frame from the Unity Main Camera and publishes it to the `/smolvla/camera_image` ROS topic. Continuous publishing logic has been removed to optimize performance.
+    *   **Location**: `Assets/Scripts/RosImagePublisher.cs`
+*   **`RosCommandPublisher.cs`**:
+    *   **Role**: Publishes text commands entered in the Unity UI `CommandInputField` to the `/smolvla/command_text` ROS topic. When the `SendCommandButton` is clicked, it first triggers `RosImagePublisher.PublishSingleImage()`.
+    *   **Location**: `Assets/Scripts/RosCommandPublisher.cs`
+*   **`SceneResetter.cs`**:
+    *   **Role**: Provides the `ResetCurrentScene()` function, which is linked to the `ResetButton` to reload the scene.
+    *   **Location**: `Assets/Scripts/SceneResetter.cs`
 
-*   **[Part 0: ROS Setup](tutorials/pick_and_place/0_ros_setup.md):** Completed, with Docker environment upgraded to Python 3 for SmolVLA.
-*   **[Part 1: Create Unity scene with imported URDF](tutorials/pick_and_place/1_urdf.md):** Completed, with fixes for import issues.
-*   **[Part 2: ROS–Unity Integration](tutorials/pick_and_place/2_ros_tcp.md):** Completed, with communication confirmed.
-*   **[Part 3: Pick-and-Place In Unity](tutorials/pick_and_place/3_pick_and_place.md):** Fully completed, with gripper integration resolved.
-*   **[Part 4: Pick-and-Place on the Real Robot](tutorials/pick_and_place/4_pick_and_place.md):** Reviewed, focused on future real-robot integration or simulation mirroring.
+#### 2. Modified Existing C# Scripts
+*   **`TrajectoryPlanner.cs`**: Resolved the `NullReferenceException` by utilizing the fully configured robot model copied from the `DemoScene`. Minimal code changes were applied to ensure compatibility with the manually assembled robot hierarchy.
+*   **`PickAndPlaceRosPublisher.cs`**: A core tutorial script assigned to the `Publisher` GameObject to manage the communication of pick and place targets to ROS.
+
+#### 3. New ROS Package and Messages (Host `ROS/src` & Docker Image)
+*   **`smolvla_ros` Package**:
+    *   **Role**: A custom ROS package created to house SmolVLA-specific nodes, messages, and launch files.
+    *   **Location**: `ROS/src/smolvla_ros/`
+    *   **Key Files**:
+        *   `msg/SmolVLACommandImage.msg`: Defines a combined message type for images and text commands.
+        *   `scripts/smolvla_node.py`: The skeleton for the Python ROS node that will host the SmolVLA model.
+        *   `launch/smolvla_launch.launch`: Launch file for the `smolvla_node`.
+        *   `CMakeLists.txt`, `package.xml`, `setup.py`: Build and dependency configuration files.
+
+#### 4. Modified Docker Configuration
+*   **`Dockerfile`**:
+    *   **Key Changes**:
+        *   Added installation of Python 3 and `pip3`.
+        *   Cloned the `HuggingFace/LeRobot` repository and installed `smolvla` dependencies.
+        *   Included instructions to copy the `smolvla_ros` package to the workspace.
+        *   Restored original `ENTRYPOINT` and added custom start scripts.
+    *   **Location**: `tutorials/pick_and_place/docker/Dockerfile`
+*   **`start_roscore.sh`**:
+    *   **Role**: Starts `roscore` and the `ROS-TCP-Endpoint` server within the `roscore_container`.
+*   **`start_subscriber.sh`**:
+    *   **Role**: Sets up the ROS environment and subscribes to image/command topics for verification in the `subscriber_container`.
+
+#### 5. New Docker Image
+*   **`unity-robotics:smolvla`**:
+    *   **Role**: The updated Docker image built from the modified `Dockerfile`. Contains Python 3, SmolVLA dependencies, the `smolvla_ros` package, and custom startup scripts.
+
+#### 6. New Unity UI Elements
+*   **`CommandInputField`**: A legacy `InputField` for user text commands.
+*   **`SendCommandButton`**: A legacy `Button` to publish commands, linked to `RosCommandPublisher`.
+*   **`ResetButton`**: A legacy `Button` to reset the simulation, linked to `SceneResetter`.
+
+#### 7. Miscellaneous
+*   **`manual_ros_setup_guide.md`**: Provides detailed, step-by-step manual instructions for configuring the ROS Docker environment to ensure reliable networking.
+*   **Git Setup**: Established an independent Git repository for the project to track all custom integration work.
 
 ---
 
-## Next Steps for SmolVLA Integration:
+## Getting Started
 
-1.  **`SmolVLA` ROS Node Development:** Develop a Python-based ROS node within the Docker container that loads the `SmolVLA` model, processes Unity camera images and text commands, and generates robot action outputs.
-2.  **Unity Vision & Language Interface:** Implement C# scripts in Unity to capture camera feeds, send them to the `SmolVLA` ROS node, provide a text command input UI, and receive/interpret `SmolVLA`'s robot action outputs to control the simulated Niryo One robot.
+To run the integration, follow the steps outlined in the [Manual ROS Setup Guide](manual_ros_setup_guide.md) to initialize the Docker environment and connect Unity.
 
----
+## Next Steps
 
-## Original Tutorial References:
-
-(The original content of the Unity Robotics Hub Pick-and-Place tutorial's markdown files are linked above for detailed steps and concepts.)
+1.  **SmolVLA Model Integration**: Fully implement the `smolvla_node.py` to load the model and process incoming Unity data.
+2.  **Action interpretation**: Develop the Unity-side logic to execute the actions generated by the SmolVLA model.
