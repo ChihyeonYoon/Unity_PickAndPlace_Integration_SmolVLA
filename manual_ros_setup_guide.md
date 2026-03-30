@@ -41,14 +41,15 @@ source /opt/ros/noetic/setup.bash
 source /catkin_ws/devel/setup.bash
 export ROS_MASTER_URI=http://roscore_container:11311/
 export PYTHONPATH=$PYTHONPATH:/lerobot_ws/src
-export HF_TOKEN=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
+export HF_TOKEN=YOUR_HF_TOKEN
 
 /usr/local/bin/python3.12 /catkin_ws/src/smolvla_ros/scripts/smolvla_node.py
 ```
 
 ## 4단계: Unity 에디터 설정 및 실행
 
-1.  **RosImagePublisher:** `Target Cameras` 리스트에 Camera1, 2, 3를 순서대로 할당합니다.
-2.  **RosCommandPublisher:** `M_NiryoOne` 칸에 `niryo_one` 로봇 오브젝트를 할당합니다.
-3.  **RosActionSubscriber:** `M_NiryoOne` 칸에 `niryo_one` 로봇 오브젝트를 할당합니다.
-4.  **Play & Test:** 텍스트 명령 입력 후 **Send** 버튼을 클릭합니다.
+1. **RosImagePublisher:** `Target Cameras` 리스트에 Camera1, 2, 3를 순서대로 할당합니다.
+2. **RosCommandPublisher:** `M_NiryoOne` 칸에 `niryo_one` 로봇 오브젝트를 할당합니다.
+3. **RosActionSubscriber:** `M_NiryoOne` 칸에 `niryo_one` 로봇 오브젝트를 할당합니다.
+4. **Play & Test:** 텍스트 명령 입력 후 **Send** 버튼을 클릭합니다.
+

@@ -26,7 +26,7 @@ class SmolVLANode:
         self.pending_command = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        os.environ["HF_TOKEN"] = "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"
+        os.environ["HF_TOKEN"] = "YOUR_HF_TOKEN"
         
         if LEROBOT_AVAILABLE:
             model_id = "lerobot/smolvla_base"
