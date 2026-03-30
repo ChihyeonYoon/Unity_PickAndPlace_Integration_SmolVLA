@@ -16,17 +16,20 @@ Based on the work in the `Unity-Robotics-Hub/tutorials/pick_and_place` directory
 
 #### 1. New C# Scripts (Unity Project `Assets/Scripts`)
 *   **`RosImagePublisher.cs`**:
-    *   **Role**: Captures a single frame from the Unity Main Camera and publishes it to the `/smolvla/camera_image` ROS topic. Continuous publishing logic has been removed to optimize performance.
+    *   **Role**: Captures frames from 3 separate Unity Cameras (Top, Side, Wrist) simultaneously and publishes them to `/smolvla/camera_image1, 2, 3` ROS topics. It temporarily overrides the render target to stealthily capture images without affecting the main Game view.
     *   **Location**: `Assets/Scripts/RosImagePublisher.cs`
 *   **`RosCommandPublisher.cs`**:
-    *   **Role**: Publishes text commands entered in the Unity UI `CommandInputField` to the `/smolvla/command_text` ROS topic. When the `SendCommandButton` is clicked, it first triggers `RosImagePublisher.PublishSingleImage()`.
+    *   **Role**: Extracts the current actual joint angles (6-DOF) of the Niryo robot and publishes them to `/smolvla/current_state`. It then publishes text commands entered in the Unity UI to `/smolvla/command_text`. A small coroutine delay ensures images and states arrive before the text command.
     *   **Location**: `Assets/Scripts/RosCommandPublisher.cs`
+*   **`RosActionSubscriber.cs`**:
+    *   **Role**: Subscribes to the `/smolvla/joint_action_cmd` topic to receive the 50-step action chunk (300 flattened floats) predicted by the AI. It uses a Coroutine to smoothly execute the entire trajectory frame-by-frame on the Niryo robot's `ArticulationBody` components, including manual scaling (x2.0) to match the robot's physical limits.
+    *   **Location**: `Assets/Scripts/RosActionSubscriber.cs`
 *   **`SceneResetter.cs`**:
     *   **Role**: Provides the `ResetCurrentScene()` function, which is linked to the `ResetButton` to reload the scene.
     *   **Location**: `Assets/Scripts/SceneResetter.cs`
 
 #### 2. Modified Existing C# Scripts
-*   **`TrajectoryPlanner.cs`**: Resolved the `NullReferenceException` by utilizing the fully configured robot model copied from the `DemoScene`. Minimal code changes were applied to ensure compatibility with the manually assembled robot hierarchy.
+*   **`TrajectoryPlanner.cs`**: Resolved the `NullReferenceException` by utilizing the fully configured robot model copied from the `DemoScene`. *Note: This legacy MoveIt script must be disabled in the Inspector when using SmolVLA for AI control to prevent service conflicts.*
 *   **`PickAndPlaceRosPublisher.cs`**: A core tutorial script assigned to the `Publisher` GameObject to manage the communication of pick and place targets to ROS.
 
 #### 3. New ROS Package and Messages (Host `ROS/src` & Docker Image)
@@ -34,29 +37,23 @@ Based on the work in the `Unity-Robotics-Hub/tutorials/pick_and_place` directory
     *   **Role**: A custom ROS package created to house SmolVLA-specific nodes, messages, and launch files.
     *   **Location**: `ROS/src/smolvla_ros/`
     *   **Key Files**:
-        *   `msg/SmolVLACommandImage.msg`: Defines a combined message type for images and text commands.
-        *   `scripts/smolvla_node.py`: The skeleton for the Python ROS node that will host the SmolVLA model.
+        *   `scripts/smolvla_node.py`: The core AI inference node running on Python 3.12. It waits for 3 camera images, text, and robot state. It utilizes the Hugging Face `AutoTokenizer` and `make_pre_post_processors` (with explicit CPU device overrides) to automatically normalize inputs/outputs. It generates a 50-step continuous trajectory using an Autoregressive loop based on simulated state updates.
         *   `launch/smolvla_launch.launch`: Launch file for the `smolvla_node`.
-        *   `CMakeLists.txt`, `package.xml`, `setup.py`: Build and dependency configuration files.
 
 #### 4. Modified Docker Configuration
 *   **`Dockerfile`**:
     *   **Key Changes**:
-        *   Added installation of Python 3 and `pip3`.
-        *   Cloned the `HuggingFace/LeRobot` repository and installed `smolvla` dependencies.
-        *   Included instructions to copy the `smolvla_ros` package to the workspace.
-        *   Restored original `ENTRYPOINT` and added custom start scripts.
+        *   Compiled Python 3.12.6 from source to satisfy strict LeRobot dependencies on ARM64 Mac hosts.
+        *   Cloned the `HuggingFace/LeRobot` repository and installed `smolvla` dependencies, patching `pyproject.toml` to resolve torchvision conflicts.
+        *   Uninstalled pip's cmake to force system cmake for ROS Melodic/Noetic compatibility.
     *   **Location**: `tutorials/pick_and_place/docker/Dockerfile`
-*   **`start_roscore.sh`**:
-    *   **Role**: Starts `roscore` and the `ROS-TCP-Endpoint` server within the `roscore_container`.
-*   **`start_subscriber.sh`**:
-    *   **Role**: Sets up the ROS environment and subscribes to image/command topics for verification in the `subscriber_container`.
 
 #### 5. New Docker Image
 *   **`unity-robotics:smolvla`**:
-    *   **Role**: The updated Docker image built from the modified `Dockerfile`. Contains Python 3, SmolVLA dependencies, the `smolvla_ros` package, and custom startup scripts.
+    *   **Role**: The updated Docker image built from the modified `Dockerfile`. Contains Python 3.12, PyTorch (CPU optimized), SmolVLA dependencies, the `smolvla_ros` package, and custom startup scripts.
 
-#### 6. New Unity UI Elements
+#### 6. New Unity UI & Camera Elements
+*   **3 Camera Setup**: `Camera1` (Top/Main), `Camera2` (Side), and `Camera3` (Wrist, attached to `tool_link`). Managed by a `ROS_Bridge_Manager` object.
 *   **`CommandInputField`**: A legacy `InputField` for user text commands.
 *   **`SendCommandButton`**: A legacy `Button` to publish commands, linked to `RosCommandPublisher`.
 *   **`ResetButton`**: A legacy `Button` to reset the simulation, linked to `SceneResetter`.
@@ -73,5 +70,6 @@ To run the integration, follow the steps outlined in the [Manual ROS Setup Guide
 
 ## Next Steps
 
-1.  **SmolVLA Model Integration**: Fully implement the `smolvla_node.py` to load the model and process incoming Unity data.
-2.  **Action interpretation**: Develop the Unity-side logic to execute the actions generated by the SmolVLA model.
+1.  **Closed-loop Control Optimization**: Transition from the current Open-loop (generating 50 steps from a single static image) to a real-time Closed-loop system that streams images and infers actions continuously at ~10Hz.
+2.  **Dataset Fine-Tuning**: Collect custom teleoperation data using the Niryo One robot in Unity to fine-tune the `smolvla_base` model. This is critical to correct the morphological mismatch (ALOHA 14-DOF vs Niryo 6-DOF) and improve reaching accuracy.
+3.  **Camera Viewpoint Calibration**: Further align the Unity camera FOV and transforms with the exact SO-100/ALOHA dataset perspectives to enhance the visual-spatial understanding of the base model.

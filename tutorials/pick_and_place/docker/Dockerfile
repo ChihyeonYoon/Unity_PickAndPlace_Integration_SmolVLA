@@ -1,17 +1,42 @@
-FROM ros:melodic-ros-base
+FROM ros:noetic-ros-base
 
 RUN sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F42ED6FBAB17C654
 
-RUN sudo apt-get update && sudo apt-get install -y vim iputils-ping net-tools python3 python3-pip ros-melodic-robot-state-publisher ros-melodic-moveit ros-melodic-rosbridge-suite ros-melodic-joy ros-melodic-ros-control ros-melodic-ros-controllers ros-melodic-tf2-web-republisher dos2unix git
+# Install basic dependencies and build tools for compiling Python
+RUN sudo apt-get update && sudo apt-get install -y vim iputils-ping net-tools ros-noetic-robot-state-publisher ros-noetic-moveit ros-noetic-rosbridge-suite ros-noetic-joy ros-noetic-ros-control ros-noetic-ros-controllers ros-noetic-tf2-web-republisher dos2unix git curl wget \
+    build-essential zlib1g-dev libncurses5-dev libgdbm-dev libnss3-dev libssl-dev libreadline-dev libffi-dev libsqlite3-dev python3-pip python-is-python3
 
+# Install rospkg for system python (ROS Melodic default)
 RUN sudo -H pip3 install rospkg jsonpickle
+
+# Compile Python 3.12 from source (Resolves GLIBC 2.28+ dependency issue)
+RUN curl -O https://www.python.org/ftp/python/3.12.6/Python-3.12.6.tar.xz && \
+    tar -xf Python-3.12.6.tar.xz && \
+    cd Python-3.12.6 && \
+    ./configure --enable-optimizations && \
+    make -j$(nproc) && \
+    sudo make altinstall && \
+    cd .. && rm -rf Python-3.12.6*
+
+# Upgrade pip for python3.12 and install ROS dependencies for it
+RUN python3.12 -m pip install --upgrade pip && \
+    python3.12 -m pip install rospkg jsonpickle defusedxml netifaces
 
 ENV ROS_WORKSPACE=/catkin_ws
 
-# Add SmolVLA installation steps
+# SmolVLA installation steps
 RUN git clone https://github.com/huggingface/lerobot.git /lerobot_ws
 WORKDIR /lerobot_ws
-RUN pip3 install -e ".[smolvla]"
+
+# Install PyTorch CPU version explicitly (Safe for Mac M2 Docker ARM64 architecture)
+RUN python3.12 -m pip install torch torchvision torchaudio
+
+# Relax torchvision version constraint to allow newer torchvision versions
+RUN sed -i 's/<0.26.0//g' pyproject.toml
+
+# Install lerobot with smolvla dependencies
+RUN python3.12 -m pip install -e ".[smolvla]"
+
 WORKDIR $ROS_WORKSPACE
 
 # Copy each directory explicitly to avoid workspace cruft
@@ -26,6 +51,9 @@ COPY ./docker/set-up-workspace /setup.sh
 COPY docker/tutorial /tutorial
 
 RUN /bin/bash -c "find /catkin_ws -type f -print0 | xargs -0 dos2unix"
+
+# Uninstall cmake installed by pip to force catkin_make to use system cmake (3.16) which is compatible with older ROS packages
+RUN python3.12 -m pip uninstall -y cmake
 
 # Set up workspace and install Python dependencies
 RUN dos2unix /tutorial && dos2unix /setup.sh && chmod +x /setup.sh && /setup.sh && rm /setup.sh

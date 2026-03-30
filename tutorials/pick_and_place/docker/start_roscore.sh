@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Source ROS and catkin workspaces
-source /opt/ros/melodic/setup.bash
+source /opt/ros/noetic/setup.bash
 source /catkin_ws/devel/setup.bash
 
 # Export ROS_MASTER_URI (important for multi-container setup)

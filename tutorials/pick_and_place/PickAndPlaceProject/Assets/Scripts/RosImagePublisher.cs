@@ -1,96 +1,94 @@
 using UnityEngine;
 using Unity.Robotics.ROSTCPConnector;
-using RosMessageTypes.Sensor; // sensor_msgs/Image 메시지 타입 사용
-using RosMessageTypes.BuiltinInterfaces; // TimeMsg 타입 사용
-using UnityEngine.Rendering; // CommandBuffer 사용
-using System.Collections.Generic;
+using RosMessageTypes.Sensor;
+using RosMessageTypes.BuiltinInterfaces;
 using System;
 
 public class RosImagePublisher : MonoBehaviour
 {
     [SerializeField]
-    string topicName = "/smolvla/camera_image"; // ROS 토픽 이름
+    Camera[] targetCameras; // 3개의 카메라를 넣을 배열 (Camera 1, 2, 3)
+    
     [SerializeField]
-    Camera targetCamera; // 이미지를 캡처할 카메라
+    string[] topicNames = { "/smolvla/camera_image1", "/smolvla/camera_image2", "/smolvla/camera_image3" };
+
     [SerializeField]
-    int imageWidth = 640; // 이미지 폭
+    int imageWidth = 256; // 모델 최적화 크기
     [SerializeField]
-    int imageHeight = 480; // 이미지 높이
+    int imageHeight = 256;
 
     ROSConnection ros;
-    Texture2D texture;
     RenderTexture renderTexture;
+    Texture2D texture;
     Rect rect;
 
     void Start()
     {
         ros = ROSConnection.GetOrCreateInstance();
-        ros.RegisterPublisher<ImageMsg>(topicName);
-
-        if (targetCamera == null)
+        foreach (var topic in topicNames)
         {
-            targetCamera = Camera.main;
-        }
-
-        if (targetCamera == null)
-        {
-            Debug.LogError("RosImagePublisher: No target camera found! Disabling script.");
-            enabled = false;
-            return;
+            ros.RegisterPublisher<ImageMsg>(topic);
         }
 
         renderTexture = new RenderTexture(imageWidth, imageHeight, 24, RenderTextureFormat.ARGB32);
-        targetCamera.targetTexture = renderTexture; // 카메라의 렌더 타겟 설정
-
-        texture = new Texture2D(imageWidth, imageHeight, TextureFormat.RGB24, false); // RGB24로 유지
+        texture = new Texture2D(imageWidth, imageHeight, TextureFormat.RGB24, false);
         rect = new Rect(0, 0, imageWidth, imageHeight);
 
-        Debug.Log($"RosImagePublisher: Ready to publish to {topicName}. Image size: {imageWidth}x{imageHeight}. ROS Master: {ros.RosIPAddress}:{ros.RosPort}");
-    }
-
-    void OnDestroy()
-    {
-        if (targetCamera != null)
+        // 메인 카메라(첫 번째)를 제외한 나머지 보조 카메라들은 게임 화면에 그리지 않도록 비활성화합니다.
+        // (비활성화되어 있어도 스크립트에서 cam.Render()를 호출하면 사진을 찍을 수 있습니다.)
+        if (targetCameras != null)
         {
-            targetCamera.targetTexture = null;
-        }
-        if (renderTexture != null)
-        {
-            renderTexture.Release();
-            Destroy(renderTexture);
-        }
-        if (texture != null)
-        {
-            Destroy(texture);
+            for (int i = 1; i < targetCameras.Length; i++)
+            {
+                if (targetCameras[i] != null)
+                {
+                    targetCameras[i].enabled = false;
+                }
+            }
         }
     }
 
     public void PublishSingleImage()
     {
-        if (!enabled) return;
+        if (targetCameras == null || targetCameras.Length == 0) return;
 
+        for (int i = 0; i < targetCameras.Length; i++)
+        {
+            if (i >= topicNames.Length || targetCameras[i] == null) continue;
+
+            CaptureAndPublish(targetCameras[i], topicNames[i]);
+        }
+    }
+
+    private void CaptureAndPublish(Camera cam, string topic)
+    {
+        var oldTarget = cam.targetTexture;
+        cam.targetTexture = renderTexture;
         RenderTexture.active = renderTexture;
-        targetCamera.Render();
+        cam.Render();
 
         texture.ReadPixels(rect, 0, 0);
         texture.Apply();
+
+        cam.targetTexture = oldTarget;
         RenderTexture.active = null;
 
-        TimeMsg stamp = new TimeMsg();
-        stamp.sec = (uint)Mathf.FloorToInt(Time.time);
-        stamp.nanosec = (uint)((Time.time - Mathf.FloorToInt(Time.time)) * 1e9);
+        ImageMsg imageMsg = new ImageMsg
+        {
+            header = new RosMessageTypes.Std.HeaderMsg { frame_id = "camera_link", stamp = GetTimeMsg() },
+            height = (uint)imageHeight,
+            width = (uint)imageWidth,
+            encoding = "rgb8",
+            step = (uint)imageWidth * 3,
+            data = texture.GetRawTextureData()
+        };
 
-        ImageMsg imageMsg = new ImageMsg();
-        imageMsg.header.stamp = stamp;
-        imageMsg.header.frame_id = "camera_link";
-        imageMsg.height = (uint)imageHeight;
-        imageMsg.width = (uint)imageWidth;
-        imageMsg.encoding = "rgb8";
-        imageMsg.is_bigendian = 0;
-        imageMsg.step = (uint)imageWidth * 3;
-        imageMsg.data = texture.GetRawTextureData();
+        ros.Publish(topic, imageMsg);
+        Debug.Log($"Published image from {cam.name} to {topic}");
+    }
 
-        ros.Publish(topicName, imageMsg);
-        Debug.Log($"RosImagePublisher: Published single image to {topicName}.");
+    private TimeMsg GetTimeMsg()
+    {
+        return new TimeMsg { sec = (uint)Time.time, nanosec = (uint)((Time.time - Math.Floor(Time.time)) * 1e9) };
     }
 }
